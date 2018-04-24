@@ -1,2 +1,2 @@
-# jsBreezeCHMS
-Node.js interface to the BreezeChMS REST API 
+# tsBreezeCHMS
+Typescript interface to the BreezeChMS REST API 
