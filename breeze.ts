@@ -12,6 +12,8 @@
 *       print '%s %s' % (person['first_name'], person['last_name'])
 */
 
+import $ from "jquery";
+
 const ENDPOINTS = {
     /* Breeze API url endpoints
     */ 
@@ -59,10 +61,9 @@ export class BreezeApi {
             this.dry_run = dry_run
         }
         
-        // TODO(alex) { use urlparse to check url format.
-        if (!(this.breeze_url && this.breeze_url.search(/^https:\/\//) &&
-                this.breeze_url.search(/\.breezechms\.com$/))) {
-            throw new BreezeError('You must provide your breeze_url as subdomain.breezechms.com');
+        if (!(this.breeze_url && (this.breeze_url.search(/^https:\/\//) > -1) &&
+                (this.breeze_url.search(/\.breezechms\.com$/) > -1))) {
+            throw new BreezeError('You must provide your breeze_url as subdomain.breezechms.com: '.concat(this.breeze_url));
         }
 
         if( !this.api_key ){
@@ -74,7 +75,7 @@ export class BreezeApi {
             endpoint:string,
             params?,
             headers?,
-            timeout?:number):any {
+            timeout?:number) {
         /* Makes an HTTP request to a given url.
         Args:
           endpoint: URL where the service can be accessed.
@@ -93,21 +94,43 @@ export class BreezeApi {
         console.log('Making request to %s', url);
             
         if( !this.dry_run ) {
+            let time_out:number;
+
+            time_out = timeout || 60
+            
+            // insert ajax request
+            $.ajax({
+                type: 'POST',
+                url: url,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Api-Key': this.api_key
+                },
+                timeout: time_out,
+                success: function(data) { 
+                    return(data);
+                },
+                error: function(data) {
+                    console.log("An error occured: " + data.status + " " + data.statusText);
+                    throw new BreezeError( 'AJAX request failed')
+                },
+                complete: function(data, status) {
+                    if( !this._request_succeeded(data) ) {
+                        throw new BreezeError(data)
+                    }
+                    console.log('JSON Response: %s', data);
+                    console.log(status);
+                }
+            });
+            
             /*
             if( params === undefined ){
                 params = {}
             }   
-            if( timeout === undefined ) {
-                timeout = 60
-            }
             
             any headers = {'Content-Type': 'application/json', 'Api-Key': this.api_key};
             any keywords = {params:params, headers:headers, timeout:timeout};
-        
             
-            keywords = dict(params=params, headers=headers, timeout=timeout)
-        
-            // insert ajax request
             response = this.connection.post(url, **keywords)
             try:
                 response = response.json()
@@ -169,15 +192,12 @@ export class BreezeApi {
         if( details !== undefined ){
             params.push('details=1')
         }
-        return this._request(ENDPOINTS.PEOPLE.concat('/?', params.join('&')));
-    }
 
-    get_profile_fields() {
-        /* List profile fields from your database.
-        Returns:
-          JSON response.
-        */
-        return this._request(ENDPOINTS.PROFILE_FIELDS);
+        try {
+            return this._request(ENDPOINTS.PEOPLE.concat('/?', params.join('&')));
+        } catch(e) {
+            throw new BreezeError(e);
+        }
     }
 
     get_person_details( person_id:string ) {
@@ -188,6 +208,14 @@ export class BreezeApi {
           JSON response.
         */
         return this._request(ENDPOINTS.PEOPLE.concat('/', person_id));
+    }
+
+    get_profile_fields() {
+        /* List profile fields from your database.
+        Returns:
+          JSON response.
+        */
+        return this._request(ENDPOINTS.PROFILE_FIELDS);
     }
 
     get_events(
@@ -207,7 +235,12 @@ export class BreezeApi {
         if( end_date !== undefined ) {
             params.push('end='.concat(end_date))
         }
-        return this._request(ENDPOINTS.EVENTS.concat('/?', params.join('&')));
+
+        try {
+            return this._request(ENDPOINTS.EVENTS.concat('/?', params.join('&')));
+        } catch(e) {
+            return this._request(ENDPOINTS.EVENTS);
+        }
     }
 
     event_check_in(
@@ -302,8 +335,11 @@ export class BreezeApi {
         if( person_id !== undefined ) {
             params.push('person_id='.concat('person_id'))
         }
-        if( uid !== undefined ) {            
+        else if( uid !== undefined ) {            
             params.push('uid='.concat('uid'))
+        }
+        else {
+            throw new BreezeError('Adding a contribution requires a person_id or uid.')
         }
         if( processor !== undefined ) {
             params.push('processor='.concat('processor'))
@@ -331,7 +367,7 @@ export class BreezeApi {
     }
 
     edit_contribution(
-            payment_id?:string,
+            payment_id:string,
             date?:string,
             name?:string,
             person_id?:string,
@@ -426,7 +462,11 @@ export class BreezeApi {
             params.push('batch_name='.concat(batch_name))
         }
         
-        return this._request(ENDPOINTS.CONTRIBUTIONS.concat('/edit?', params.join('&')))['payment_id'];
+        try {
+            return this._request(ENDPOINTS.CONTRIBUTIONS.concat('/edit?', params.join('&')))['payment_id'];
+        } catch(e) {
+            throw new BreezeError('Editing a contribution requires a payment_id.')
+        }
     }
     
     delete_contribution( payment_id:string ) {
@@ -439,7 +479,16 @@ export class BreezeApi {
           BreezeError on failure to delete contribution.
         */
 
-        return this._request(ENDPOINTS.CONTRIBUTIONS.concat('/delete?payment_id=', payment_id))['payment_id'];
+        let params:string[]
+        if( payment_id !== undefined ) {
+            params.push('payment_id='.concat('payment_id'))
+        }
+        
+        try {
+            return this._request(ENDPOINTS.CONTRIBUTIONS.concat('/delete?', params.join('&')))['payment_id'];
+        } catch(e) {
+            throw new BreezeError('Deleting a contribution requires a payment_id.')
+        }
     }
 
     list_contributions(
@@ -453,7 +502,7 @@ export class BreezeApi {
             fund_ids?:string[],
             envelope_number?:string,
             batches?:string[],
-            forms?:string[]):any {
+            forms?:string[]) {
         /* Retrieve a list of contributions.
         Args:
           start_date: Find contributions given on or after a specific date
@@ -513,10 +562,15 @@ export class BreezeApi {
         if( forms !== undefined ) {
             params.push('forms='.concat(forms.join("-")))
         }
-        return this._request(ENDPOINTS.CONTRIBUTIONS.concat('/list/', params.join('&')));
+
+        try {
+            return this._request(ENDPOINTS.CONTRIBUTIONS.concat('/list?', params.join('&')));
+        } catch(e) {
+            return this._request(ENDPOINTS.CONTRIBUTIONS);
+        }
     }
 
-    list_funds( include_totals?:boolean ):any {
+    list_funds( include_totals?:boolean ) {
         /* List all funds.
         Args:
           include_totals: Amount given to the fund should be returned.
@@ -528,10 +582,15 @@ export class BreezeApi {
         if( include_totals !== undefined && include_totals ) {
             params.push('include_totals=1')
         }
-        return this._request(ENDPOINTS.FUNDS.concat('/list?', params.join('&')));
+        
+        try {
+            return this._request(ENDPOINTS.FUNDS.concat('/list?', params.join('&')));
+        } catch(e) {
+            return this._request(ENDPOINTS.FUNDS);
+        }
     }
     
-    list_campaigns():any {
+    list_campaigns() {
         /* List of campaigns.
         Returns:
           JSON response.
@@ -539,7 +598,7 @@ export class BreezeApi {
         return this._request(ENDPOINTS.PLEDGES.concat('/list_campaigns'));
     }
 
-    list_pledges( campaign_id:string ):any {
+    list_pledges( campaign_id:string ) {
         /* List of pledges within a campaign.
         Args:
           campaign_id: ID number of a campaign.
