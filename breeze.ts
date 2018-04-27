@@ -3,16 +3,17 @@
 *   The Breeze API allows churches to build custom functionality integrated with
 *   Breeze.
 *   Usage:
-*     from breeze import breeze
-*     breeze_api = breeze.BreezeApi(
+*     import * as breeze from './breeze';
+*     let breeze_api = breeze.BreezeApi(
 *         breeze_url='https://demo.breezechms.com',
 *         api_key='5c2d2cbacg3...')
-*     people = breeze_api.GetPeople();
+*     let people = breeze_api.get_people();
+*     let person;
 *     for person in people:
-*       print '%s %s' % (person['first_name'], person['last_name'])
+*       console.log('%s %s', person['first_name'], person['last_name']);
 */
 
-import $ from "jquery";
+import fetch from 'node-fetch'
 
 const ENDPOINTS = {
     /* Breeze API url endpoints
@@ -25,11 +26,10 @@ const ENDPOINTS = {
     PLEDGES : '/api/pledges'
 };
 
-export class BreezeError extends Error {
+class BreezeError extends Error {
     /* Error for BreezeApi.
     */
 }
-
 
 export class BreezeApi {
     /* A wrapper for the Breeze REST API.
@@ -85,72 +85,52 @@ export class BreezeApi {
         Returns:
           HTTP response
         Throws:
-     BreezeError if connection or request fails.
+          BreezeError if connection or request fails.
         */
 
         let url:string;
         
         url = this.breeze_url + endpoint
-        console.log('Making request to %s', url);
+        console.log('Making async request to %s', url);
             
         if( !this.dry_run ) {
             let time_out:number;
 
             time_out = timeout || 60
             
+            const options = {
+              method: 'GET',
+              headers: {
+                'Content-Type': 'application/json',
+                'Api-Key': this.api_key
+              },
+              timeout: time_out * 1000,
+              mode: 'cors'
+            };
+        
             // insert ajax request
-            $.ajax({
-                type: 'POST',
-                url: url,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Api-Key': this.api_key
-                },
-                timeout: time_out,
-                success: function(data) { 
-                    return(data);
-                },
-                error: function(data) {
-                    console.log("An error occured: " + data.status + " " + data.statusText);
-                    throw new BreezeError( 'AJAX request failed')
-                },
-                complete: function(data, status) {
-                    if( !this._request_succeeded(data) ) {
-                        throw new BreezeError(data)
-                    }
-                    console.log('JSON Response: %s', data);
-                    console.log(status);
-                }
-            });
-            
-            /*
-            if( params === undefined ){
-                params = {}
-            }   
-            
-            any headers = {'Content-Type': 'application/json', 'Api-Key': this.api_key};
-            any keywords = {params:params, headers:headers, timeout:timeout};
-            
-            response = this.connection.post(url, **keywords)
-            try:
-                response = response.json()
-            except requests.ConnectionError as error:
-                throw new BreezeError(error.message)
-            else:
-                if not this._request_succeeded(response) {
-                    throw new BreezeError(response)
-                console.log('JSON Response: %s', response);
-                return response
-            */
+            return fetch(url, options)
+                    .then( res => res.json() )
+                    .then( data => {
+                      if( !this._request_succeeded(data) ) {
+                        return fetch.Promise.reject(new BreezeError(data));
+                      }
+                      return fetch.Promise.resolve(data);
+                    })
+                    .catch( error => {
+                      return fetch.Promise.reject(new BreezeError(error));
+                    });
         }
 
-        return {};
+        return fetch.Promise.resolve({});
     }
 
     _request_succeeded( response ) {
         /* Predicate to ensure that the HTTP request succeeded.
         */
-        return !(('error' in response) || ('errorCode' in response));
+        let response_obj = JSON.parse(response);
+        return !(('error' in response_obj) || ('errorCode' in response_obj));
+        //return true;
     }
 
     get_people(
@@ -194,7 +174,7 @@ export class BreezeApi {
         }
 
         try {
-            return this._request(ENDPOINTS.PEOPLE.concat('/?', params.join('&')));
+            return this._request(ENDPOINTS.PEOPLE.concat('/?', params.join('&')), 10);
         } catch(e) {
             throw new BreezeError(e);
         }
@@ -251,8 +231,21 @@ export class BreezeApi {
           person_id: id for a person in Breeze database.
           event_instance_id: id for event instance to check into..
         */
-
-        return this._request(ENDPOINTS.EVENTS.concat('/attendance/add?person_id=', person_id, '&instance_id=', event_instance_id));
+        
+        let params:string[]
+        if( person_id !== undefined ) {
+            params.push('person_id='.concat(person_id))
+        }
+        if( event_instance_id !== undefined ) {
+            params.push('instance_id='.concat(event_instance_id))
+        }
+        
+        try {
+            return this._request(ENDPOINTS.EVENTS.concat('/attendance/add?', params.join('&')));
+        } catch(e) {
+            throw new BreezeError('Event checkin requires a person_id and event_instance_id.')
+        }
+        
     }
 
     event_check_out(
@@ -266,7 +259,19 @@ export class BreezeApi {
           True if check-out succeeds; False if check-out fails.
         */
 
-        return this._request(ENDPOINTS.EVENTS.concat('/attendance/delete?person_id=', person_id, '&instance_id=', event_instance_id));
+        let params:string[]
+        if( person_id !== undefined ) {
+            params.push('person_id='.concat(person_id))
+        }
+        if( event_instance_id !== undefined ) {
+            params.push('instance_id='.concat(event_instance_id))
+        }
+        
+        try {
+            return this._request(ENDPOINTS.EVENTS.concat('/attendance/delete?', params.join('&')));
+        } catch(e) {
+            throw new BreezeError('Event checkout requires a person_id and event_instance_id.')
+        }
     }
 
     add_contribution(
@@ -605,7 +610,15 @@ export class BreezeApi {
         Returns:
           JSON response.
         */
-        return this._request(ENDPOINTS.PLEDGES.concat('/list_pledges?campaign_id=', campaign_id));
+        let params:string[]
+        if( campaign_id !== undefined ) {
+            params.push('campaign_id='.concat(campaign_id))
+        }
         
+        try {
+            return this._request(ENDPOINTS.PLEDGES.concat('/list_pledges?', params.join('&')));
+        } catch(e) {
+            throw new BreezeError('Listing pledges within a campaign requires a campaign_id.')
+        }        
     }
 }
