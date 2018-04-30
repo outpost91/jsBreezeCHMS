@@ -9,8 +9,9 @@
 *         api_key='5c2d2cbacg3...')
 *     let people = breeze_api.get_people();
 *     let person;
-*     for person in people:
+*     for(person in people) {
 *       console.log('%s %s', person['first_name'], person['last_name']);
+*     }
 */
 
 import fetch from 'node-fetch'
