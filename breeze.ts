@@ -88,9 +88,8 @@ export class BreezeApi {
           BreezeError if connection or request fails.
         */
 
-        let url:string;
+        const url:string = this.breeze_url + endpoint;
         
-        url = this.breeze_url + endpoint
         console.log('Making async request to %s', url);
             
         if( !this.dry_run ) {
@@ -108,7 +107,6 @@ export class BreezeApi {
               mode: 'cors'
             };
         
-            // insert ajax request
             return fetch(url, options)
                     .then( res => res.json() )
                     .then( data => {
@@ -128,9 +126,7 @@ export class BreezeApi {
     _request_succeeded( response ) {
         /* Predicate to ensure that the HTTP request succeeded.
         */
-        let response_obj = JSON.parse(response);
-        return !(('error' in response_obj) || ('errorCode' in response_obj));
-        //return true;
+        return !(('error' in response) || ('errorCode' in response));
     }
 
     get_people(
@@ -162,7 +158,7 @@ export class BreezeApi {
           }
         */
 
-        let params:string[]
+        const params:string[] = new Array()
         if( limit !== undefined ){
             params.push('limit='.concat(limit.toString()))
         }
@@ -173,11 +169,7 @@ export class BreezeApi {
             params.push('details=1')
         }
 
-        try {
-            return this._request(ENDPOINTS.PEOPLE.concat('/?', params.join('&')), 10);
-        } catch(e) {
-            throw new BreezeError(e);
-        }
+        return this._request(ENDPOINTS.PEOPLE.concat('/?', params.join('&')), 10);
     }
 
     get_person_details( person_id:string ) {
@@ -208,7 +200,7 @@ export class BreezeApi {
         Returns:
           JSON response.
         */
-        let params:string[]
+        const params:string[] = new Array()
         if( start_date !== undefined ) {
             params.push('start='.concat(start_date))
         }
@@ -232,7 +224,7 @@ export class BreezeApi {
           event_instance_id: id for event instance to check into..
         */
         
-        let params:string[]
+        const params:string[] = new Array()
         if( person_id !== undefined ) {
             params.push('person_id='.concat(person_id))
         }
@@ -240,12 +232,7 @@ export class BreezeApi {
             params.push('instance_id='.concat(event_instance_id))
         }
         
-        try {
-            return this._request(ENDPOINTS.EVENTS.concat('/attendance/add?', params.join('&')));
-        } catch(e) {
-            throw new BreezeError('Event checkin requires a person_id and event_instance_id.')
-        }
-        
+        return this._request(ENDPOINTS.EVENTS.concat('/attendance/add?', params.join('&')));       
     }
 
     event_check_out(
@@ -259,7 +246,7 @@ export class BreezeApi {
           True if check-out succeeds; False if check-out fails.
         */
 
-        let params:string[]
+        const params:string[] = new Array()
         if( person_id !== undefined ) {
             params.push('person_id='.concat(person_id))
         }
@@ -267,11 +254,7 @@ export class BreezeApi {
             params.push('instance_id='.concat(event_instance_id))
         }
         
-        try {
-            return this._request(ENDPOINTS.EVENTS.concat('/attendance/delete?', params.join('&')));
-        } catch(e) {
-            throw new BreezeError('Event checkout requires a person_id and event_instance_id.')
-        }
+        return this._request(ENDPOINTS.EVENTS.concat('/attendance/delete?', params.join('&')));
     }
 
     add_contribution(
@@ -330,7 +313,7 @@ export class BreezeApi {
           BreezeError on failure to add contribution.
         */
 
-        let params:string[]
+        const params:string[] = new Array()
         if( date !== undefined ) {
             params.push('date='.concat('date'))
         }
@@ -429,7 +412,7 @@ export class BreezeApi {
           BreezeError on failure to edit contribution.
         */
 
-        let params:string[]
+        const params:string[] = new Array()
         if( payment_id !== undefined ) {
             params.push('payment_id='.concat(payment_id))
         }
@@ -467,11 +450,7 @@ export class BreezeApi {
             params.push('batch_name='.concat(batch_name))
         }
         
-        try {
-            return this._request(ENDPOINTS.CONTRIBUTIONS.concat('/edit?', params.join('&')))['payment_id'];
-        } catch(e) {
-            throw new BreezeError('Editing a contribution requires a payment_id.')
-        }
+        return this._request(ENDPOINTS.CONTRIBUTIONS.concat('/edit?', params.join('&')))['payment_id'];
     }
     
     delete_contribution( payment_id:string ) {
@@ -484,7 +463,7 @@ export class BreezeApi {
           BreezeError on failure to delete contribution.
         */
 
-        let params:string[]
+        const params:string[] = new Array()
         if( payment_id !== undefined ) {
             params.push('payment_id='.concat('payment_id'))
         }
@@ -530,7 +509,7 @@ export class BreezeApi {
           BreezeError on malformed request.
         */
 
-        let params:string[]
+        const params:string[] = new Array()
         if( start_date !== undefined ) {
             params.push('start='.concat(start_date))
         }
@@ -583,7 +562,7 @@ export class BreezeApi {
           JSON Reponse.
         */
 
-        let params:string[]
+        const params:string[] = new Array()
         if( include_totals !== undefined && include_totals ) {
             params.push('include_totals=1')
         }
@@ -610,7 +589,7 @@ export class BreezeApi {
         Returns:
           JSON response.
         */
-        let params:string[]
+        const params:string[] = new Array()
         if( campaign_id !== undefined ) {
             params.push('campaign_id='.concat(campaign_id))
         }
