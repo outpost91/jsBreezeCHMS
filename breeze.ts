@@ -9,22 +9,127 @@
 *         api_key='5c2d2cbacg3...')
 *     let people = breeze_api.get_people();
 *     let person;
-*     for(person in people) {
+*     for person in people:
 *       console.log('%s %s', person['first_name'], person['last_name']);
-*     }
 */
 
 import fetch from 'node-fetch'
+
+interface _request_params {
+    headers?:{},
+    timeout?:number
+}
+
+interface person_id_params {
+    person_id:number
+}
+
+interface get_person_details_params extends person_id_params {}
+
+interface get_people_params {
+    limit?:number,
+    offset?:number,
+    details?:boolean,
+    filter_json?:{}
+}
+
+interface get_tags_params {
+    folder_id?:string
+}
+
+interface optional_date_params {
+    start_date?:string,
+    end_date?:string
+}
+
+interface get_events_params extends optional_date_params {
+    category_id?:string,
+    eligible?:boolean,
+    details?:boolean,
+    limit?:number
+}
+
+interface get_event_params {
+    instance_id:number,
+    schedule?:boolean,
+    schedule_direction?:string,
+    schedule_limit?:number,
+    eligible?:boolean,
+    details?:boolean
+}
+
+interface event_check_in_params extends person_id_params {
+    instance_id:number
+}
+
+interface event_check_out_params extends event_check_in_params {}
+
+interface get_event_list_params {
+    instance_id:number,
+    details?:boolean,
+    type?:string
+}
+
+interface get_event_eligible_params {
+    instance_id:number
+}
+
+interface payment_id_params {
+    payment_id:string
+}
+
+interface add_contribution_params {
+    date?:string,
+    name?:string,
+    person_id?:number,
+    uid?:number,
+    processor?:string,
+    method?:string,
+    funds_json?:string,
+    amount?:string,
+    group?:string,
+    batch_number?:number,
+    batch_name?:string
+}
+
+interface edit_contribution_params extends add_contribution_params, payment_id_params {}
+
+interface delete_contribution_params extends payment_id_params {}
+
+interface list_contributions_params extends optional_date_params {
+    person_id?:number,
+    include_family?:boolean,
+    amount_min?:number,
+    amount_max?:number,
+    method_ids?:string[],
+    fund_ids?:string[],
+    envelope_number?:number,
+    batches?:string[],
+    forms?:string[]
+}
+
+interface list_funds_params {
+    include_totals?:boolean
+}
+
+interface list_pledges {
+    campaign_id:number
+}
 
 const ENDPOINTS = {
     /* Breeze API url endpoints
     */ 
     PEOPLE : '/api/people',
     EVENTS : '/api/events',
+    ATTENDANCE : '/api/events/attendance', // Check In from api docs
     PROFILE_FIELDS : '/api/profile',
     CONTRIBUTIONS : '/api/giving',
     FUNDS : '/api/funds',
-    PLEDGES : '/api/pledges'
+    PLEDGES : '/api/pledges',
+    TAGS : '/api/tags',
+    VOLUNTEERS : '/api/volunteers',
+    ACCOUNT : '/api/account',
+    FORMS : '/api/forms'
 };
 
 class BreezeError extends Error {
@@ -38,6 +143,7 @@ export class BreezeApi {
     breeze_url:string;
     api_key:string;
     dry_run:boolean;
+    name:string = this.constructor.name;
 
     constructor( 
             breeze_url:string,
@@ -56,11 +162,7 @@ export class BreezeApi {
 
         this.breeze_url = breeze_url
         this.api_key = api_key
-        if( dry_run === undefined ) {
-            this.dry_run = false
-        } else {
-            this.dry_run = dry_run
-        }
+        this.dry_run = dry_run || false
         
         if (!(this.breeze_url && (this.breeze_url.search(/^https:\/\//) > -1) &&
                 (this.breeze_url.search(/\.breezechms\.com$/) > -1))) {
@@ -74,17 +176,14 @@ export class BreezeApi {
 
     _request( 
             endpoint:string,
-            params?,
-            headers?,
-            timeout?:number) {
-        /* Makes an HTTP request to a given url.
+            optionalObj?:_request_params) {
+        /* Makes an async HTTP 'GET' request to a given url.
         Args:
           endpoint: URL where the service can be accessed.
-          params: Query parameters to append to endpoint url.
-          headers: HTTP headers; used for authenication parameters.
-          timeout: Timeout in seconds for HTTP request.
+          headers: HTTP headers; used for authenication parameters. NOT IMPLEMENTED YET
+          timeout: Timeout in seconds for HTTP request. Default 30 seconds.
         Returns:
-          HTTP response
+          fetch Promise
         Throws:
           BreezeError if connection or request fails.
         */
@@ -92,32 +191,28 @@ export class BreezeApi {
         const url:string = this.breeze_url + endpoint;
         
         console.log('Making async request to %s', url);
-            
+        
         if( !this.dry_run ) {
-            let time_out:number;
-
-            time_out = timeout || 60
-            
             const options = {
-              method: 'GET',
-              headers: {
-                'Content-Type': 'application/json',
-                'Api-Key': this.api_key
-              },
-              timeout: time_out * 1000,
-              mode: 'cors'
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Api-Key': this.api_key
+                },
+                timeout: ((optionalObj !== undefined && optionalObj.timeout !== undefined) ? optionalObj.timeout : 30) * 1000,
+                mode: 'cors'
             };
         
             return fetch(url, options)
                     .then( res => res.json() )
                     .then( data => {
-                      if( !this._request_succeeded(data) ) {
-                        return fetch.Promise.reject(new BreezeError(data));
-                      }
-                      return fetch.Promise.resolve(data);
+                        if( !this._request_succeeded(data) ) {
+                            return fetch.Promise.reject(new BreezeError(data));
+                        }
+                        return fetch.Promise.resolve(data);
                     })
                     .catch( error => {
-                      return fetch.Promise.reject(new BreezeError(error));
+                        return fetch.Promise.reject(new BreezeError(error));
                     });
         }
 
@@ -130,10 +225,21 @@ export class BreezeApi {
         return !(('error' in response) || ('errorCode' in response));
     }
 
+    /*
+    * "public" API interface
+    */
+
+    /*
+    * People
+    */
+    
     get_people(
-            limit?:number,
-            offset?:number,
-            details?:boolean) {
+            {
+            limit,
+            offset,
+            details,
+            filter_json
+            }:get_people_params) {
         /* List people from your database.
         Args:
           limit: Number of people to return. If None, will return all people.
@@ -166,21 +272,27 @@ export class BreezeApi {
         if( offset !== undefined ){
             params.push('offset='.concat(offset.toString()))
         }
-        if( details !== undefined ){
+        if( details !== undefined && details === true ){
             params.push('details=1')
         }
+        if( filter_json !== undefined ){
+            params.push('filter_json='.concat(JSON.stringify(filter_json)))
+        }
 
-        return this._request(ENDPOINTS.PEOPLE.concat('/?', params.join('&')), 10);
+        return this._request(ENDPOINTS.PEOPLE.concat('/?', params.join('&')), {timeout: 10});
     }
 
-    get_person_details( person_id:string ) {
+    get_person_details(
+            {
+            person_id
+            }:get_person_details_params ) {
         /* Retrieve the details for a specific person by their ID.
         Args:
           person_id: Unique id for a person in Breeze database.
         Returns:
           JSON response.
         */
-        return this._request(ENDPOINTS.PEOPLE.concat('/', person_id));
+        return this._request(ENDPOINTS.PEOPLE.concat('/', person_id.toString()));
     }
 
     get_profile_fields() {
@@ -191,13 +303,98 @@ export class BreezeApi {
         return this._request(ENDPOINTS.PROFILE_FIELDS);
     }
 
+    // TODO: Add Person, Update Person, Delete Person
+
+    /*
+    * Tags
+    */
+    
+    get_tags(
+            {
+            folder_id
+            }:get_tags_params ) {
+        /* List people from your database.
+        Args:
+          folder_id: The Numeric ID of a folder.
+        Returns:
+          JSON response. For example:
+          [
+          {
+              "id":"523928",
+              "name":"4th & 5th",
+              "created_on":"2017-09-10 09:19:40",
+              "folder_id":"1539"
+          },
+          {
+              "id":"51994",
+              "name":"6th Grade",
+              "created_on":"2017-02-06 06:40:40",
+              "folder_id":"1539"
+          },
+           ...
+          ]
+        */
+
+        const params:string[] = new Array()
+        if( folder_id !== undefined ) {
+            params.push('folder_id='.concat('folder_id'))
+        }
+        
+        try {
+            return this._request(ENDPOINTS.TAGS.concat('/list_tags?', params.join('&')));
+        } catch(e) {
+            return this._request(ENDPOINTS.TAGS.concat('/list_tags'));
+        }
+    }
+
+    get_folders() {
+        /* List people from your database.
+        Returns:
+          JSON response. For example:
+          [
+          {
+              "id":"1234567",
+              "parent_id":"0",
+              "name":"All Tags",
+              "created_on":"2017-06-05 18:12:34"
+          },
+          {
+              "id":"8234253",
+              "parent_id":"120425",
+              "name":"Kids",
+              "created_on":"2017-06-05 18:12:10"
+          },
+           
+          ...
+
+          ]
+        */
+        return this._request(ENDPOINTS.TAGS.concat('/list_folders'));
+    }
+
+    // TODO: Add Tag, Add Folder, Delete Tag, Delete Folder, Assign Tag, Unassign Tag
+
+    /*
+    * Events
+    */
+    
     get_events(
-            start_date?:string,
-            end_date?:string ) {
+            {
+            start_date,
+            end_date,
+            category_id,
+            eligible,
+            details,
+            limit
+            }:get_events_params ) {
         /* Retrieve all events for a given date range.
         Args:
-          start_date: Start date; defaults to first day of the current month.
-          end_date: End date; defaults to last day of the current month
+          start_date: Start date; Events on or after (YYYY-MM-DD). defaults to first day of the current month.
+          end_date: End date; Events on or before (YYYY-MM-DD). defaults to last day of the current month.
+          category_id: If supplied, only events on the specified calendar will be returned.
+          eligible: details about who is eligible to be checked in
+          details: additional event details will be returned
+          limit: Number of events to return. Default is 500. Max is 1000.
         Returns:
           JSON response.
         */
@@ -208,68 +405,303 @@ export class BreezeApi {
         if( end_date !== undefined ) {
             params.push('end='.concat(end_date))
         }
+        if( category_id !== undefined ) {
+            params.push('category_id='.concat(category_id))
+        }
+        if( eligible !== undefined ) {
+            params.push('eligible='.concat(eligible.toString()))
+        }
+        if( details !== undefined  && details === true) {
+            params.push('details=1')
+        }
+        if( limit !== undefined ) {
+            params.push('limit='.concat(limit.toString()))
+        }
 
         try {
             return this._request(ENDPOINTS.EVENTS.concat('/?', params.join('&')));
         } catch(e) {
+            console.log(e)
             return this._request(ENDPOINTS.EVENTS);
         }
     }
 
+    get_event(
+            {
+            instance_id,
+            schedule,
+            schedule_direction,
+            schedule_limit,
+            eligible,
+            details
+            }:get_event_params ) {
+        /* Retrieve all events for a given date range.
+        Args:
+          instance_id: The id of the event instance that should be returned.
+          schedule: If other instances in the same series should be included.
+          schedule_direction: If including the schedule, should it include events before the instance_id or after the instance_id
+          schedule_limit: If including the schedule, how many events in the series should be returned. Default is 10. 
+          eligible: details about who is eligible to be checked in.
+          details: additional event details will be returned.
+        Returns:
+          JSON response.
+        */
+        const params:string[] = new Array()
+        if( instance_id !== undefined ) {
+            params.push('instance_id='.concat(instance_id.toString()))
+        } else {
+            throw new BreezeError('Listing an Event requires an instance_id.')
+        }
+        if( schedule !== undefined ) {
+            params.push('schedule='.concat(schedule.toString()))
+        }
+        if( schedule_direction !== undefined ) {
+            if( !schedule ) {
+                throw new BreezeError('schedule_direction requires a schedule.')
+            }
+            switch( schedule_direction.trim() ) {
+                case 'before':
+                case 'after':
+                    params.push('schedule_direction='.concat(schedule_direction))
+                default:
+                    console.log('schedule_direction', schedule_direction)
+                    throw new BreezeError('schedule_direction can only be \'before\' or \'after\'.')
+            }
+        }
+        if( schedule_limit !== undefined ) {
+            if( !schedule ) {
+                throw new BreezeError('schedule_limit requires a schedule.')
+            }
+            params.push('schedule_limit='.concat(schedule_limit.toString()))
+        }
+        if( eligible !== undefined ) {
+            params.push('eligible='.concat(eligible.toString()))
+        }
+        if( details !== undefined ) {
+            params.push('details='.concat(eligible.toString()))
+        }
+
+        return this._request(ENDPOINTS.EVENTS.concat('/list_event?', params.join('&')));
+    }
+    // TODO: List Calendars, List Locations, Add Event, Delete Event
+
+    /*
+    * Check In
+    */
+    
     event_check_in(
-            person_id:string,
-            event_instance_id:string) {
+            {
+            person_id,
+            instance_id
+            }:event_check_in_params) {
         /* Checks in a person into an event.
         Args:
           person_id: id for a person in Breeze database.
-          event_instance_id: id for event instance to check into..
+          instance_id: id for event instance to check into.
+        Returns:
+          True if check-in succeeds; False if check-in fails.
         */
         
         const params:string[] = new Array()
         if( person_id !== undefined ) {
-            params.push('person_id='.concat(person_id))
+            params.push('person_id='.concat(person_id.toString()))
         }
-        if( event_instance_id !== undefined ) {
-            params.push('instance_id='.concat(event_instance_id))
+        if( instance_id !== undefined ) {
+            params.push('instance_id='.concat(instance_id.toString()))
+        }
+
+        if( !person_id || !instance_id ) {
+            throw new BreezeError('Adding attendance requires a person_id and instance_id.')
         }
         
-        return this._request(ENDPOINTS.EVENTS.concat('/attendance/add?', params.join('&')));       
+        return this._request(ENDPOINTS.ATTENDANCE.concat('/add?', params.join('&')));
     }
 
     event_check_out(
-            person_id:string,
-            event_instance_id:string) {
+            {
+            person_id,
+            instance_id
+            }:event_check_out_params) {
         /* Remove the attendance for a person checked into an event.
         Args:
           person_id: Breeze ID for a person in Breeze database.
-          event_instance_id: id for event instance to check out (delete).
+          instance_id: id for event instance to check out (delete).
         Returns:
           True if check-out succeeds; False if check-out fails.
         */
 
         const params:string[] = new Array()
         if( person_id !== undefined ) {
-            params.push('person_id='.concat(person_id))
+            params.push('person_id='.concat(person_id.toString()))
         }
-        if( event_instance_id !== undefined ) {
-            params.push('instance_id='.concat(event_instance_id))
+        if( instance_id !== undefined ) {
+            params.push('instance_id='.concat(instance_id.toString()))
         }
         
-        return this._request(ENDPOINTS.EVENTS.concat('/attendance/delete?', params.join('&')));
+        if( !person_id || !instance_id ) {
+            throw new BreezeError('Deleting attendance requires a person_id and instance_id.')
+        }
+
+        return this._request(ENDPOINTS.ATTENDANCE.concat('/delete?', params.join('&')));
+    }
+
+    get_event_list(
+            {
+            instance_id,
+            details,
+            type
+            }:get_event_list_params) {
+        /* List the attendance checked into an event.
+        Args:
+          instance_id: id for event instance to list.
+          details: If set to true, details of the person will be included in the response.
+          type: Determines if result should contain people or anonymous head count by setting to either 'person' or 'anonymous'.
+        Returns:
+          JSON response.
+        */
+
+        const params:string[] = new Array()
+        if( instance_id !== undefined ) {
+            params.push('instance_id='.concat(instance_id.toString()))
+        } else {
+            throw new BreezeError('Listing attendance requires an instance_id.')
+        }
+        if( details !== undefined ) {
+            params.push('details='.concat(details.toString()))
+        }
+        if( type !== undefined ) {
+            switch( type.trim() ) {
+                case 'person':
+                case 'anonymous':
+                    params.push('type='.concat(type))
+                default:
+                    throw new BreezeError('type can only be \'person\' or \'anonymous\'.')
+            }
+        }
+        
+        return this._request(ENDPOINTS.ATTENDANCE.concat('/delete?', params.join('&')));
+    }
+
+    get_event_eligible(
+            {
+            instance_id
+            }:get_event_eligible_params) {
+        /* List the eligible attendance to checked into an event.
+        Args:
+          instance_id: id for event instance to list.
+        Returns:
+          JSON response.
+        */
+
+        const params:string[] = new Array()
+        if( instance_id !== undefined ) {
+            params.push('instance_id='.concat(instance_id.toString()))
+        } else {
+            throw new BreezeError('Listing attendance requires an instance_id.')
+        }
+        
+        return this._request(ENDPOINTS.ATTENDANCE.concat('/eligible?', params.join('&')));
+    }
+
+    /*
+    * Contributions
+    */
+    
+    list_contributions(
+            {
+            start_date,
+            end_date,
+            person_id,
+            include_family,
+            amount_min,
+            amount_max,
+            method_ids,
+            fund_ids,
+            envelope_number,
+            batches,
+            forms
+            }:list_contributions_params) {
+        /* Retrieve a list of contributions.
+        Args:
+          start_date: Find contributions given on or after a specific date
+                      (ie. 2015-1-1); required.
+          end_date: Find contributions given on or before a specific date
+                    (ie. 2018-1-31); required.
+          person_id: ID of person's contributions to fetch. (ie. 9023482)
+          include_family: Include family members of person_id (must provide
+                          person_id); default: False.
+          amount_min: Contribution amounts equal or greater than.
+          amount_max: Contribution amounts equal or less than.
+          method_ids: List of method IDs.
+          fund_ids: List of fund IDs.
+          envelope_number: Envelope number.
+          batches: List of Batch numbers.
+          forms: List of form IDs.
+        Returns:
+          List of matching contributions.
+        Throws:
+          BreezeError on malformed request.
+        */
+
+        const params:string[] = new Array()
+        if( start_date !== undefined ) {
+            params.push('start='.concat(start_date))
+        }
+        if( end_date !== undefined ) {
+            params.push('end='.concat(end_date))
+        }
+        if( person_id !== undefined ) {
+            params.push('person_id='.concat(person_id.toString()))
+        }
+        if( include_family !== undefined && include_family === true) {
+            if( !person_id ) {
+                throw new BreezeError('include_family requires a person_id.')
+            }
+            params.push('include_family='.concat(include_family.toString()))
+        }
+        if( amount_min !== undefined ) {
+            params.push('amount_min='.concat(amount_min.toString()))
+        }
+        if( amount_max !== undefined ) {
+            params.push('amount_max='.concat(amount_max.toString()))
+        }
+        if( method_ids !== undefined ) {
+            params.push('method_ids='.concat(method_ids.join('-')))
+        }
+        if( fund_ids !== undefined ) {
+            params.push('fund_ids='.concat(fund_ids.join('-')))
+        }
+        if( envelope_number !== undefined ) {
+            params.push('envelope_number='.concat(envelope_number.toString()))
+        }
+        if( batches !== undefined ) {
+            params.push('batches='.concat(batches.join('-')))
+        }
+        if( forms !== undefined ) {
+            params.push('forms='.concat(forms.join("-")))
+        }
+
+        try {
+            return this._request(ENDPOINTS.CONTRIBUTIONS.concat('/list?', params.join('&')));
+        } catch(e) {
+            return this._request(ENDPOINTS.CONTRIBUTIONS.concat('/list'));
+        }
     }
 
     add_contribution(
-            date?:string,
-            name?:string,
-            person_id?:string,
-            uid?:string,
-            processor?:string,
-            method?:string,
-            funds_json?,
-            amount?:string,
-            group?:string,
-            batch_number?:string,
-            batch_name?:string) {
+            {
+            date,
+            name,
+            person_id,
+            uid,
+            processor,
+            method,
+            funds_json,
+            amount,
+            group,
+            batch_number,
+            batch_name
+            }:add_contribution_params) {
         /* Add a contribution to Breeze.
         Args:
           date: Date of transaction in DD-MM-YYYY format (ie. 24-5-2015)
@@ -356,18 +788,20 @@ export class BreezeApi {
     }
 
     edit_contribution(
-            payment_id:string,
-            date?:string,
-            name?:string,
-            person_id?:string,
-            uid?:string,
-            processor?:string,
-            method?:string,
-            funds_json?,
-            amount?:string,
-            group?:string,
-            batch_number?:string,
-            batch_name?:string) {
+            {
+            payment_id,
+            date,
+            name,
+            person_id,
+            uid,
+            processor,
+            method,
+            funds_json,
+            amount,
+            group,
+            batch_number,
+            batch_name
+            }:edit_contribution_params) {
         /* Edit an existing contribution.
         Args:
           payment_id: The ID of the payment that should be modified.
@@ -424,10 +858,10 @@ export class BreezeApi {
             params.push('name='.concat(name))
         }
         if( person_id !== undefined ) {
-            params.push('person_id='.concat(person_id))
+            params.push('person_id='.concat(person_id.toString()))
         }
         if( uid !== undefined ) {
-            params.push('uid='.concat(uid))
+            params.push('uid='.concat(uid.toString()))
         }
         if( processor !== undefined ) {
             params.push('processor='.concat(processor))
@@ -445,7 +879,7 @@ export class BreezeApi {
             params.push('group='.concat(group))
         }
         if( batch_number !== undefined ) {
-            params.push('batch_number='.concat(batch_number))
+            params.push('batch_number='.concat(batch_number.toString()))
         }
         if( batch_name !== undefined ) {
             params.push('batch_name='.concat(batch_name))
@@ -454,7 +888,10 @@ export class BreezeApi {
         return this._request(ENDPOINTS.CONTRIBUTIONS.concat('/edit?', params.join('&')))['payment_id'];
     }
     
-    delete_contribution( payment_id:string ) {
+    delete_contribution(
+            {
+            payment_id
+            }:delete_contribution_params ) {
         /* Delete an existing contribution.
         Args:
           payment_id: The ID of the payment that should be deleted.
@@ -467,95 +904,17 @@ export class BreezeApi {
         const params:string[] = new Array()
         if( payment_id !== undefined ) {
             params.push('payment_id='.concat('payment_id'))
-        }
-        
-        try {
-            return this._request(ENDPOINTS.CONTRIBUTIONS.concat('/delete?', params.join('&')))['payment_id'];
-        } catch(e) {
+        } else {
             throw new BreezeError('Deleting a contribution requires a payment_id.')
         }
+        
+        return this._request(ENDPOINTS.CONTRIBUTIONS.concat('/delete?', params.join('&')))['payment_id'];    
     }
 
-    list_contributions(
-            start_date?:string,
-            end_date?:string,
-            person_id?:string,
-            include_family?:boolean,
-            amount_min?:string,
-            amount_max?:string,
-            method_ids?:string[],
-            fund_ids?:string[],
-            envelope_number?:string,
-            batches?:string[],
-            forms?:string[]) {
-        /* Retrieve a list of contributions.
-        Args:
-          start_date: Find contributions given on or after a specific date
-                      (ie. 2015-1-1); required.
-          end_date: Find contributions given on or before a specific date
-                    (ie. 2018-1-31); required.
-          person_id: ID of person's contributions to fetch. (ie. 9023482)
-          include_family: Include family members of person_id (must provide
-                          person_id); default: False.
-          amount_min: Contribution amounts equal or greater than.
-          amount_max: Contribution amounts equal or less than.
-          method_ids: List of method IDs.
-          fund_ids: List of fund IDs.
-          envelope_number: Envelope number.
-          batches: List of Batch numbers.
-          forms: List of form IDs.
-        Returns:
-          List of matching contributions.
-        Throws:
-          BreezeError on malformed request.
-        */
-
-        const params:string[] = new Array()
-        if( start_date !== undefined ) {
-            params.push('start='.concat(start_date))
-        }
-        if( end_date !== undefined ) {
-            params.push('end='.concat(end_date))
-        }
-        if( person_id !== undefined ) {
-            params.push('person_id='.concat(person_id))
-        }
-        if( include_family !== undefined ) {
-            if( !person_id ) {
-                throw new BreezeError('include_family requires a person_id.')
-            }
-            params.push('include_family=1')
-        }
-        if( amount_min !== undefined ) {
-            params.push('amount_min='.concat(amount_min))
-        }
-        if( amount_max !== undefined ) {
-            params.push('amount_max='.concat(amount_max))
-        }
-        if( method_ids !== undefined ) {
-            params.push('method_ids='.concat(method_ids.join('-')))
-        }
-        if( fund_ids !== undefined ) {
-            params.push('fund_ids='.concat(fund_ids.join('-')))
-        }
-        if( envelope_number !== undefined ) {
-            params.push('envelope_number='.concat(envelope_number))
-        }
-        if( batches !== undefined ) {
-            params.push('batches='.concat(batches.join('-')))
-        }
-        if( forms !== undefined ) {
-            params.push('forms='.concat(forms.join("-")))
-        }
-
-        try {
-            return this._request(ENDPOINTS.CONTRIBUTIONS.concat('/list?', params.join('&')));
-        } catch(e) {
-            return this._request(ENDPOINTS.CONTRIBUTIONS);
-        }
-    }
-
-    list_funds( include_totals?:boolean ) {
+    list_funds(
+            {
+            include_totals
+            }:list_funds_params ) {
         /* List all funds.
         Args:
           include_totals: Amount given to the fund should be returned.
@@ -565,16 +924,22 @@ export class BreezeApi {
 
         const params:string[] = new Array()
         if( include_totals !== undefined && include_totals ) {
-            params.push('include_totals=1')
+            params.push('include_totals='.concat(include_totals.toString()))
         }
         
         try {
             return this._request(ENDPOINTS.FUNDS.concat('/list?', params.join('&')));
         } catch(e) {
-            return this._request(ENDPOINTS.FUNDS);
+            return this._request(ENDPOINTS.FUNDS.concat('/list'));
         }
     }
     
+    // TODO: View Contributions
+
+    /*
+    * Pledges
+    */
+
     list_campaigns() {
         /* List of campaigns.
         Returns:
@@ -583,7 +948,10 @@ export class BreezeApi {
         return this._request(ENDPOINTS.PLEDGES.concat('/list_campaigns'));
     }
 
-    list_pledges( campaign_id:string ) {
+    list_pledges(
+            {
+            campaign_id
+            }:list_pledges ) {
         /* List of pledges within a campaign.
         Args:
           campaign_id: ID number of a campaign.
@@ -592,13 +960,30 @@ export class BreezeApi {
         */
         const params:string[] = new Array()
         if( campaign_id !== undefined ) {
-            params.push('campaign_id='.concat(campaign_id))
+            params.push('campaign_id='.concat(campaign_id.toString()))
+        } else {
+            throw new BreezeError('Listing pledges within a campaign requires a campaign_id.')
         }
         
-        try {
-            return this._request(ENDPOINTS.PLEDGES.concat('/list_pledges?', params.join('&')));
-        } catch(e) {
-            throw new BreezeError('Listing pledges within a campaign requires a campaign_id.')
-        }        
+        return this._request(ENDPOINTS.PLEDGES.concat('/list_pledges?', params.join('&')));         
     }
+
+    /*
+    * Forms
+    */
+
+    // TODO: List Forms, List Form Fields, List Form Entries
+    
+    /*
+    * Volunteers
+    */
+
+    // TODO: List Volunteers, Add Volunteer, Update Volunteer, Remove Volunteer, List Volunteer Roles, Add Volunteer Role, Remove Volunteer Role
+    
+    /*
+    * Account
+    */
+
+    // TODO: Summary, List Account Log
+    
 }
