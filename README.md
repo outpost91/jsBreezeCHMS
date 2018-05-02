@@ -5,7 +5,7 @@ Based on https://github.com/alexortizrosado/pyBreezeChMS
 
 ## Installation
 
-Before using pyBreezeChMS, you'll need to install the [node-fetch](https://www.npmjs.com/package/node-fetch) library:
+Before using tsBreezeChMS, you'll need to install the [node-fetch](https://www.npmjs.com/package/node-fetch) library:
 
     npm install node-fetch
 
