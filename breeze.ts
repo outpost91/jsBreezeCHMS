@@ -9,16 +9,12 @@
 *         api_key='5c2d2cbacg3...')
 *     let people = breeze_api.get_people();
 *     let person;
-*     for person in people:
-*       console.log('%s %s', person['first_name'], person['last_name']);
+*     for( let person in people) {
+*       console.log(person['first_name'], person['last_name'])
+*     }
 */
 
-import fetch from 'node-fetch'
-
-interface _request_params {
-    headers?:{},
-    timeout?:number
-}
+import * as breeze_fetch from './breeze-fetch'
 
 interface person_id_params {
     person_id:number
@@ -43,7 +39,7 @@ interface optional_date_params {
 }
 
 interface get_events_params extends optional_date_params {
-    category_id?:string,
+    category_id?:number,
     eligible?:boolean,
     details?:boolean,
     limit?:number
@@ -132,102 +128,10 @@ const ENDPOINTS = {
     FORMS : '/api/forms'
 };
 
-class BreezeError extends Error {
-    /* Error for BreezeApi.
-    */
-}
-
-export class BreezeApi {
+export class BreezeApi extends breeze_fetch.BreezeAsync {
     /* A wrapper for the Breeze REST API.
     */
-    breeze_url:string;
-    api_key:string;
-    dry_run:boolean;
     name:string = this.constructor.name;
-
-    constructor( 
-            breeze_url:string,
-            api_key:string,
-            dry_run?:boolean ) {
-        /* Instantiates the BreezeApi with your Breeze account information.
-        Args:
-          breeze_url: Fully qualified domain for your organizations Breeze service.
-          api_key: Unique Breeze API key. For instructions on finding your
-                   organizations API key, see:
-                   http://breezechms.com/docs#extensions_api
-          dry_run: Enable no-op mode, which disables requests from being made. When
-                   combined with debug, this allows debugging requests without
-                   affecting data in your Breeze account.
-        */
-
-        this.breeze_url = breeze_url
-        this.api_key = api_key
-        this.dry_run = dry_run || false
-        
-        if (!(this.breeze_url && (this.breeze_url.search(/^https:\/\//) > -1) &&
-                (this.breeze_url.search(/\.breezechms\.com$/) > -1))) {
-            throw new BreezeError('You must provide your breeze_url as subdomain.breezechms.com: '.concat(this.breeze_url));
-        }
-
-        if( !this.api_key ){
-            throw new BreezeError('You must provide an API key.');
-        }
-    }
-
-    _request( 
-            endpoint:string,
-            optionalObj?:_request_params) {
-        /* Makes an async HTTP 'GET' request to a given url.
-        Args:
-          endpoint: URL where the service can be accessed.
-          headers: HTTP headers; used for authenication parameters. NOT IMPLEMENTED YET
-          timeout: Timeout in seconds for HTTP request. Default 30 seconds.
-        Returns:
-          fetch Promise
-        Throws:
-          BreezeError if connection or request fails.
-        */
-
-        const url:string = this.breeze_url + endpoint;
-        
-        console.log('Making async request to %s', url);
-        
-        if( !this.dry_run ) {
-            const options = {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Api-Key': this.api_key
-                },
-                timeout: ((optionalObj !== undefined && optionalObj.timeout !== undefined) ? optionalObj.timeout : 30) * 1000,
-                mode: 'cors'
-            };
-        
-            return fetch(url, options)
-                    .then( res => res.json() )
-                    .then( data => {
-                        if( !this._request_succeeded(data) ) {
-                            return fetch.Promise.reject(new BreezeError(data));
-                        }
-                        return fetch.Promise.resolve(data);
-                    })
-                    .catch( error => {
-                        return fetch.Promise.reject(new BreezeError(error));
-                    });
-        }
-
-        return fetch.Promise.resolve({});
-    }
-
-    _request_succeeded( response ) {
-        /* Predicate to ensure that the HTTP request succeeded.
-        */
-        return !(('error' in response) || ('errorCode' in response));
-    }
-
-    /*
-    * "public" API interface
-    */
 
     /*
     * People
@@ -272,14 +176,14 @@ export class BreezeApi {
         if( offset !== undefined ){
             params.push('offset='.concat(offset.toString()))
         }
-        if( details !== undefined && details === true ){
-            params.push('details=1')
+        if( details !== undefined ){
+            params.push('details='.concat(details.toString()))
         }
         if( filter_json !== undefined ){
             params.push('filter_json='.concat(JSON.stringify(filter_json)))
         }
 
-        return this._request(ENDPOINTS.PEOPLE.concat('/?', params.join('&')), {timeout: 10});
+        return this._request(ENDPOINTS.PEOPLE.concat('?', params.join('&')), {timeout: 10});
     }
 
     get_person_details(
@@ -406,22 +310,22 @@ export class BreezeApi {
             params.push('end='.concat(end_date))
         }
         if( category_id !== undefined ) {
-            params.push('category_id='.concat(category_id))
+            params.push('category_id='.concat(category_id.toString()))
         }
         if( eligible !== undefined ) {
             params.push('eligible='.concat(eligible.toString()))
         }
         if( details !== undefined  && details === true) {
-            params.push('details=1')
+            params.push('details='.concat(details.toString()))
         }
         if( limit !== undefined ) {
             params.push('limit='.concat(limit.toString()))
         }
 
         try {
-            return this._request(ENDPOINTS.EVENTS.concat('/?', params.join('&')));
+            return this._request(ENDPOINTS.EVENTS.concat('?', params.join('&')));
         } catch(e) {
-            console.log(e)
+            console.error(e)
             return this._request(ENDPOINTS.EVENTS);
         }
     }
@@ -450,14 +354,14 @@ export class BreezeApi {
         if( instance_id !== undefined ) {
             params.push('instance_id='.concat(instance_id.toString()))
         } else {
-            throw new BreezeError('Listing an Event requires an instance_id.')
+            throw new breeze_fetch.BreezeError('Listing an Event requires an instance_id.')
         }
         if( schedule !== undefined ) {
             params.push('schedule='.concat(schedule.toString()))
         }
         if( schedule_direction !== undefined ) {
             if( !schedule ) {
-                throw new BreezeError('schedule_direction requires a schedule.')
+                throw new breeze_fetch.BreezeError('schedule_direction requires a schedule.')
             }
             switch( schedule_direction.trim() ) {
                 case 'before':
@@ -465,12 +369,12 @@ export class BreezeApi {
                     params.push('schedule_direction='.concat(schedule_direction))
                 default:
                     console.log('schedule_direction', schedule_direction)
-                    throw new BreezeError('schedule_direction can only be \'before\' or \'after\'.')
+                    throw new breeze_fetch.BreezeError('schedule_direction can only be \'before\' or \'after\'.')
             }
         }
         if( schedule_limit !== undefined ) {
             if( !schedule ) {
-                throw new BreezeError('schedule_limit requires a schedule.')
+                throw new breeze_fetch.BreezeError('schedule_limit requires a schedule.')
             }
             params.push('schedule_limit='.concat(schedule_limit.toString()))
         }
@@ -483,7 +387,16 @@ export class BreezeApi {
 
         return this._request(ENDPOINTS.EVENTS.concat('/list_event?', params.join('&')));
     }
-    // TODO: List Calendars, List Locations, Add Event, Delete Event
+    
+    get_calendars() {
+        /* List clendars from your database.
+        Returns:
+          JSON response.
+        */
+        return this._request(ENDPOINTS.EVENTS.concat('/calendars/list'));
+    }
+
+    // TODO: List Locations, Add Event, Delete Event
 
     /*
     * Check In
@@ -511,7 +424,7 @@ export class BreezeApi {
         }
 
         if( !person_id || !instance_id ) {
-            throw new BreezeError('Adding attendance requires a person_id and instance_id.')
+            throw new breeze_fetch.BreezeError('Adding attendance requires a person_id and instance_id.')
         }
         
         return this._request(ENDPOINTS.ATTENDANCE.concat('/add?', params.join('&')));
@@ -539,7 +452,7 @@ export class BreezeApi {
         }
         
         if( !person_id || !instance_id ) {
-            throw new BreezeError('Deleting attendance requires a person_id and instance_id.')
+            throw new breeze_fetch.BreezeError('Deleting attendance requires a person_id and instance_id.')
         }
 
         return this._request(ENDPOINTS.ATTENDANCE.concat('/delete?', params.join('&')));
@@ -564,7 +477,7 @@ export class BreezeApi {
         if( instance_id !== undefined ) {
             params.push('instance_id='.concat(instance_id.toString()))
         } else {
-            throw new BreezeError('Listing attendance requires an instance_id.')
+            throw new breeze_fetch.BreezeError('Listing attendance requires an instance_id.')
         }
         if( details !== undefined ) {
             params.push('details='.concat(details.toString()))
@@ -575,7 +488,7 @@ export class BreezeApi {
                 case 'anonymous':
                     params.push('type='.concat(type))
                 default:
-                    throw new BreezeError('type can only be \'person\' or \'anonymous\'.')
+                    throw new breeze_fetch.BreezeError('type can only be \'person\' or \'anonymous\'.')
             }
         }
         
@@ -597,7 +510,7 @@ export class BreezeApi {
         if( instance_id !== undefined ) {
             params.push('instance_id='.concat(instance_id.toString()))
         } else {
-            throw new BreezeError('Listing attendance requires an instance_id.')
+            throw new breeze_fetch.BreezeError('Listing attendance requires an instance_id.')
         }
         
         return this._request(ENDPOINTS.ATTENDANCE.concat('/eligible?', params.join('&')));
@@ -640,7 +553,7 @@ export class BreezeApi {
         Returns:
           List of matching contributions.
         Throws:
-          BreezeError on malformed request.
+          breeze_fetch.BreezeError on malformed request.
         */
 
         const params:string[] = new Array()
@@ -655,7 +568,7 @@ export class BreezeApi {
         }
         if( include_family !== undefined && include_family === true) {
             if( !person_id ) {
-                throw new BreezeError('include_family requires a person_id.')
+                throw new breeze_fetch.BreezeError('include_family requires a person_id.')
             }
             params.push('include_family='.concat(include_family.toString()))
         }
@@ -743,7 +656,7 @@ export class BreezeApi {
         Returns:
           Payment Id.
         Throws:
-          BreezeError on failure to add contribution.
+          breeze_fetch.BreezeError on failure to add contribution.
         */
 
         const params:string[] = new Array()
@@ -760,7 +673,7 @@ export class BreezeApi {
             params.push('uid='.concat('uid'))
         }
         else {
-            throw new BreezeError('Adding a contribution requires a person_id or uid.')
+            throw new breeze_fetch.BreezeError('Adding a contribution requires a person_id or uid.')
         }
         if( processor !== undefined ) {
             params.push('processor='.concat('processor'))
@@ -844,7 +757,7 @@ export class BreezeApi {
         Returns:
           Payment id.
         Throws:
-          BreezeError on failure to edit contribution.
+          breeze_fetch.BreezeError on failure to edit contribution.
         */
 
         const params:string[] = new Array()
@@ -898,14 +811,14 @@ export class BreezeApi {
         Returns:
           Payment id.
         Throws:
-          BreezeError on failure to delete contribution.
+          breeze_fetch.BreezeError on failure to delete contribution.
         */
 
         const params:string[] = new Array()
         if( payment_id !== undefined ) {
             params.push('payment_id='.concat('payment_id'))
         } else {
-            throw new BreezeError('Deleting a contribution requires a payment_id.')
+            throw new breeze_fetch.BreezeError('Deleting a contribution requires a payment_id.')
         }
         
         return this._request(ENDPOINTS.CONTRIBUTIONS.concat('/delete?', params.join('&')))['payment_id'];    
@@ -962,7 +875,7 @@ export class BreezeApi {
         if( campaign_id !== undefined ) {
             params.push('campaign_id='.concat(campaign_id.toString()))
         } else {
-            throw new BreezeError('Listing pledges within a campaign requires a campaign_id.')
+            throw new breeze_fetch.BreezeError('Listing pledges within a campaign requires a campaign_id.')
         }
         
         return this._request(ENDPOINTS.PLEDGES.concat('/list_pledges?', params.join('&')));         
