@@ -4,11 +4,8 @@
 *   Breeze.
 *   Usage:
 *     import * as breeze from './breeze';
-*     let breeze_api = breeze.BreezeApi(
-*         breeze_url='https://demo.breezechms.com',
-*         api_key='5c2d2cbacg3...')
+*     let breeze_api = breeze.BreezeApi({request: ()})
 *     let people = breeze_api.get_people();
-*     let person;
 *     for( let person in people) {
 *       console.log(person['first_name'], person['last_name'])
 *     }
@@ -128,22 +125,12 @@ const ENDPOINTS = {
     FORMS : '/api/forms'
 };
 
-export class BreezeApi extends breeze_fetch.BreezeAsync {
-    /* A wrapper for the Breeze REST API.
-    */
-    name:string = this.constructor.name;
+/**
+ * People
+ */
 
-    /*
-    * People
-    */
-    
-    get_people(
-            {
-            limit,
-            offset,
-            details,
-            filter_json
-            }:get_people_params) {
+const _people = (state) => ({
+    get_people: ({limit, offset, details, filter_json}:get_people_params) => {
         /* List people from your database.
         Args:
           limit: Number of people to return. If None, will return all people.
@@ -183,40 +170,19 @@ export class BreezeApi extends breeze_fetch.BreezeAsync {
             params.push('filter_json='.concat(JSON.stringify(filter_json)))
         }
 
-        return this._request(ENDPOINTS.PEOPLE.concat('?', params.join('&')), {timeout: 10});
-    }
+        return state.request(ENDPOINTS.PEOPLE.concat('?', params.join('&')), {timeout: 10});
+    },
+    get_person_details: ({person_id}:get_person_details_params) => state.request(ENDPOINTS.PEOPLE.concat('/', person_id.toString())),
+    get_profile_fields: () => state.request(ENDPOINTS.PROFILE_FIELDS)
+})
 
-    get_person_details(
-            {
-            person_id
-            }:get_person_details_params ) {
-        /* Retrieve the details for a specific person by their ID.
-        Args:
-          person_id: Unique id for a person in Breeze database.
-        Returns:
-          JSON response.
-        */
-        return this._request(ENDPOINTS.PEOPLE.concat('/', person_id.toString()));
-    }
+// TODO: Add Person, Update Person, Delete Person
+/*
+* Tags
+*/
 
-    get_profile_fields() {
-        /* List profile fields from your database.
-        Returns:
-          JSON response.
-        */
-        return this._request(ENDPOINTS.PROFILE_FIELDS);
-    }
-
-    // TODO: Add Person, Update Person, Delete Person
-
-    /*
-    * Tags
-    */
-    
-    get_tags(
-            {
-            folder_id
-            }:get_tags_params ) {
+const _tags = (state) => ({
+    get_tags: ({folder_id}:get_tags_params) => {
         /* List people from your database.
         Args:
           folder_id: The Numeric ID of a folder.
@@ -238,59 +204,27 @@ export class BreezeApi extends breeze_fetch.BreezeAsync {
            ...
           ]
         */
-
         const params:string[] = new Array()
         if( folder_id !== undefined ) {
             params.push('folder_id='.concat('folder_id'))
         }
         
         try {
-            return this._request(ENDPOINTS.TAGS.concat('/list_tags?', params.join('&')));
+            return state.request(ENDPOINTS.TAGS.concat('/list_tags?', params.join('&')));
         } catch(e) {
-            return this._request(ENDPOINTS.TAGS.concat('/list_tags'));
+            return state.request(ENDPOINTS.TAGS.concat('/list_tags'));
         }
-    }
+    },
+    get_folders: () => state.request(ENDPOINTS.TAGS.concat('/list_folders'))
+})
 
-    get_folders() {
-        /* List people from your database.
-        Returns:
-          JSON response. For example:
-          [
-          {
-              "id":"1234567",
-              "parent_id":"0",
-              "name":"All Tags",
-              "created_on":"2017-06-05 18:12:34"
-          },
-          {
-              "id":"8234253",
-              "parent_id":"120425",
-              "name":"Kids",
-              "created_on":"2017-06-05 18:12:10"
-          },
-           
-          ...
+// TODO: Add Tag, Add Folder, Delete Tag, Delete Folder, Assign Tag, Unassign Tag
+/*
+* Events
+*/
 
-          ]
-        */
-        return this._request(ENDPOINTS.TAGS.concat('/list_folders'));
-    }
-
-    // TODO: Add Tag, Add Folder, Delete Tag, Delete Folder, Assign Tag, Unassign Tag
-
-    /*
-    * Events
-    */
-    
-    get_events(
-            {
-            start_date,
-            end_date,
-            category_id,
-            eligible,
-            details,
-            limit
-            }:get_events_params ) {
+const _events = (state) => ({
+    get_events: ({start_date, end_date, category_id, eligible, details, limit}:get_events_params) => {
         /* Retrieve all events for a given date range.
         Args:
           start_date: Start date; Events on or after (YYYY-MM-DD). defaults to first day of the current month.
@@ -323,22 +257,13 @@ export class BreezeApi extends breeze_fetch.BreezeAsync {
         }
 
         try {
-            return this._request(ENDPOINTS.EVENTS.concat('?', params.join('&')));
+            return state.request(ENDPOINTS.EVENTS.concat('?', params.join('&')));
         } catch(e) {
             console.error(e)
-            return this._request(ENDPOINTS.EVENTS);
+            return state.request(ENDPOINTS.EVENTS);
         }
-    }
-
-    get_event(
-            {
-            instance_id,
-            schedule,
-            schedule_direction,
-            schedule_limit,
-            eligible,
-            details
-            }:get_event_params ) {
+    },
+    get_event: ({instance_id, schedule, schedule_direction, schedule_limit, eligible, details}:get_event_params) => {
         /* Retrieve all events for a given date range.
         Args:
           instance_id: The id of the event instance that should be returned.
@@ -385,28 +310,19 @@ export class BreezeApi extends breeze_fetch.BreezeAsync {
             params.push('details='.concat(eligible.toString()))
         }
 
-        return this._request(ENDPOINTS.EVENTS.concat('/list_event?', params.join('&')));
-    }
-    
-    get_calendars() {
-        /* List clendars from your database.
-        Returns:
-          JSON response.
-        */
-        return this._request(ENDPOINTS.EVENTS.concat('/calendars/list'));
-    }
+        return state.request(ENDPOINTS.EVENTS.concat('/list_event?', params.join('&')));
+    },
+    get_calendars: () => state.request(ENDPOINTS.EVENTS.concat('/calendars/list'))
+})
 
-    // TODO: List Locations, Add Event, Delete Event
+// TODO: List Locations, Add Event, Delete Event
 
-    /*
-    * Check In
-    */
-    
-    event_check_in(
-            {
-            person_id,
-            instance_id
-            }:event_check_in_params) {
+/*
+* Check In
+*/
+
+const _check_in = (state) => ({
+    event_check_in: ({person_id, instance_id}:event_check_in_params) => {
         /* Checks in a person into an event.
         Args:
           person_id: id for a person in Breeze database.
@@ -422,19 +338,13 @@ export class BreezeApi extends breeze_fetch.BreezeAsync {
         if( instance_id !== undefined ) {
             params.push('instance_id='.concat(instance_id.toString()))
         }
-
         if( !person_id || !instance_id ) {
             throw new breeze_fetch.BreezeError('Adding attendance requires a person_id and instance_id.')
         }
         
-        return this._request(ENDPOINTS.ATTENDANCE.concat('/add?', params.join('&')));
-    }
-
-    event_check_out(
-            {
-            person_id,
-            instance_id
-            }:event_check_out_params) {
+        return state.request(ENDPOINTS.ATTENDANCE.concat('/add?', params.join('&')));
+    },
+    event_check_out: ({ person_id, instance_id}:event_check_out_params) => {
         /* Remove the attendance for a person checked into an event.
         Args:
           person_id: Breeze ID for a person in Breeze database.
@@ -442,7 +352,6 @@ export class BreezeApi extends breeze_fetch.BreezeAsync {
         Returns:
           True if check-out succeeds; False if check-out fails.
         */
-
         const params:string[] = new Array()
         if( person_id !== undefined ) {
             params.push('person_id='.concat(person_id.toString()))
@@ -455,15 +364,9 @@ export class BreezeApi extends breeze_fetch.BreezeAsync {
             throw new breeze_fetch.BreezeError('Deleting attendance requires a person_id and instance_id.')
         }
 
-        return this._request(ENDPOINTS.ATTENDANCE.concat('/delete?', params.join('&')));
-    }
-
-    get_event_list(
-            {
-            instance_id,
-            details,
-            type
-            }:get_event_list_params) {
+        return state.request(ENDPOINTS.ATTENDANCE.concat('/delete?', params.join('&')));
+    },
+    get_event_list: ({instance_id, details, type}:get_event_list_params) => {
         /* List the attendance checked into an event.
         Args:
           instance_id: id for event instance to list.
@@ -472,7 +375,6 @@ export class BreezeApi extends breeze_fetch.BreezeAsync {
         Returns:
           JSON response.
         */
-
         const params:string[] = new Array()
         if( instance_id !== undefined ) {
             params.push('instance_id='.concat(instance_id.toString()))
@@ -492,20 +394,15 @@ export class BreezeApi extends breeze_fetch.BreezeAsync {
             }
         }
         
-        return this._request(ENDPOINTS.ATTENDANCE.concat('/delete?', params.join('&')));
-    }
-
-    get_event_eligible(
-            {
-            instance_id
-            }:get_event_eligible_params) {
+        return state.request(ENDPOINTS.ATTENDANCE.concat('/delete?', params.join('&')));
+    },
+    get_event_eligible: ({instance_id}:get_event_eligible_params) => {
         /* List the eligible attendance to checked into an event.
         Args:
           instance_id: id for event instance to list.
         Returns:
           JSON response.
         */
-
         const params:string[] = new Array()
         if( instance_id !== undefined ) {
             params.push('instance_id='.concat(instance_id.toString()))
@@ -513,27 +410,29 @@ export class BreezeApi extends breeze_fetch.BreezeAsync {
             throw new breeze_fetch.BreezeError('Listing attendance requires an instance_id.')
         }
         
-        return this._request(ENDPOINTS.ATTENDANCE.concat('/eligible?', params.join('&')));
+        return state.request(ENDPOINTS.ATTENDANCE.concat('/eligible?', params.join('&')));
     }
+})
 
-    /*
-    * Contributions
-    */
-    
-    list_contributions(
-            {
-            start_date,
-            end_date,
-            person_id,
-            include_family,
-            amount_min,
-            amount_max,
-            method_ids,
-            fund_ids,
-            envelope_number,
-            batches,
-            forms
-            }:list_contributions_params) {
+/*
+* Contributions
+*/
+
+const _contributions = (state) => ({
+    list_contributions: (
+        {
+        start_date,
+        end_date,
+        person_id,
+        include_family,
+        amount_min,
+        amount_max,
+        method_ids,
+        fund_ids,
+        envelope_number,
+        batches,
+        forms
+        }:list_contributions_params) => {
         /* Retrieve a list of contributions.
         Args:
           start_date: Find contributions given on or after a specific date
@@ -555,7 +454,6 @@ export class BreezeApi extends breeze_fetch.BreezeAsync {
         Throws:
           breeze_fetch.BreezeError on malformed request.
         */
-
         const params:string[] = new Array()
         if( start_date !== undefined ) {
             params.push('start='.concat(start_date))
@@ -593,28 +491,26 @@ export class BreezeApi extends breeze_fetch.BreezeAsync {
         if( forms !== undefined ) {
             params.push('forms='.concat(forms.join("-")))
         }
-
         try {
-            return this._request(ENDPOINTS.CONTRIBUTIONS.concat('/list?', params.join('&')));
+            return state.request(ENDPOINTS.CONTRIBUTIONS.concat('/list?', params.join('&')));
         } catch(e) {
-            return this._request(ENDPOINTS.CONTRIBUTIONS.concat('/list'));
+            return state.request(ENDPOINTS.CONTRIBUTIONS.concat('/list'));
         }
-    }
-
-    add_contribution(
-            {
-            date,
-            name,
-            person_id,
-            uid,
-            processor,
-            method,
-            funds_json,
-            amount,
-            group,
-            batch_number,
-            batch_name
-            }:add_contribution_params) {
+    },
+    add_contribution: (
+        {
+        date,
+        name,
+        person_id,
+        uid,
+        processor,
+        method,
+        funds_json,
+        amount,
+        group,
+        batch_number,
+        batch_name
+        }:add_contribution_params) => {
         /* Add a contribution to Breeze.
         Args:
           date: Date of transaction in DD-MM-YYYY format (ie. 24-5-2015)
@@ -624,7 +520,7 @@ export class BreezeApi extends breeze_fetch.BreezeAsync {
                      person id  (ie. 1234567)
           uid: The unique id of the person sent from the giving platform. This
                should be used when the Breeze ID is unknown. Within Breeze a user
-               will be able to associate this ID with a given Breeze ID.
+               will be able to associate state ID with a given Breeze ID.
                (ie. 9876543)
           processor: The name of the processor used to send the payment. Used in
                      conjunction with uid. Not needed if using Breeze ID.
@@ -648,7 +544,7 @@ export class BreezeApi extends breeze_fetch.BreezeAsync {
           amount: Total amount given. Must match sum of amount in funds_json.
           group: This will create a new batch and enter all contributions with the
                  same group into the new batch. Previous groups will be remembered
-                 and so they should be unique for every new batch. Use this if
+                 and so they should be unique for every new batch. Use state if
                  wanting to import into the next batch number in a series.
           batch_number: The batch number to import contributions into. Use group
                         instead if you want to import into the next batch number.
@@ -658,7 +554,6 @@ export class BreezeApi extends breeze_fetch.BreezeAsync {
         Throws:
           breeze_fetch.BreezeError on failure to add contribution.
         */
-
         const params:string[] = new Array()
         if( date !== undefined ) {
             params.push('date='.concat('date'))
@@ -696,25 +591,23 @@ export class BreezeApi extends breeze_fetch.BreezeAsync {
         if( batch_name !== undefined ) {
             params.push('batch_name='.concat('batch_name'))
         }
-
-        return this._request(ENDPOINTS.CONTRIBUTIONS.concat('/add?', params.join('&')))['payment_id'];
-    }
-
-    edit_contribution(
-            {
-            payment_id,
-            date,
-            name,
-            person_id,
-            uid,
-            processor,
-            method,
-            funds_json,
-            amount,
-            group,
-            batch_number,
-            batch_name
-            }:edit_contribution_params) {
+        return state.request(ENDPOINTS.CONTRIBUTIONS.concat('/add?', params.join('&')))['payment_id'];
+    },
+    edit_contribution: (
+        {
+        payment_id,
+        date,
+        name,
+        person_id,
+        uid,
+        processor,
+        method,
+        funds_json,
+        amount,
+        group,
+        batch_number,
+        batch_name
+        }:edit_contribution_params) => {
         /* Edit an existing contribution.
         Args:
           payment_id: The ID of the payment that should be modified.
@@ -725,7 +618,7 @@ export class BreezeApi extends breeze_fetch.BreezeAsync {
                      person id  (ie. 1234567)
           uid: The unique id of the person sent from the giving platform. This
                should be used when the Breeze ID is unknown. Within Breeze a user
-               will be able to associate this ID with a given Breeze ID.
+               will be able to associate state ID with a given Breeze ID.
                (ie. 9876543)
           processor: The name of the processor used to send the payment. Used in
                      conjunction with uid. Not needed if using Breeze ID.
@@ -749,7 +642,7 @@ export class BreezeApi extends breeze_fetch.BreezeAsync {
           amount: Total amount given. Must match sum of amount in funds_json.
           group: This will create a new batch and enter all contributions with the
                  same group into the new batch. Previous groups will be remembered
-                 and so they should be unique for every new batch. Use this if
+                 and so they should be unique for every new batch. Use state if
                  wanting to import into the next batch number in a series.
           batch_number: The batch number to import contributions into. Use group
                         instead if you want to import into the next batch number.
@@ -759,7 +652,6 @@ export class BreezeApi extends breeze_fetch.BreezeAsync {
         Throws:
           breeze_fetch.BreezeError on failure to edit contribution.
         */
-
         const params:string[] = new Array()
         if( payment_id !== undefined ) {
             params.push('payment_id='.concat(payment_id))
@@ -798,13 +690,9 @@ export class BreezeApi extends breeze_fetch.BreezeAsync {
             params.push('batch_name='.concat(batch_name))
         }
         
-        return this._request(ENDPOINTS.CONTRIBUTIONS.concat('/edit?', params.join('&')))['payment_id'];
-    }
-    
-    delete_contribution(
-            {
-            payment_id
-            }:delete_contribution_params ) {
+        return state.request(ENDPOINTS.CONTRIBUTIONS.concat('/edit?', params.join('&')))['payment_id'];
+    },
+    delete_contribution: ({payment_id}:delete_contribution_params) => {
         /* Delete an existing contribution.
         Args:
           payment_id: The ID of the payment that should be deleted.
@@ -813,7 +701,6 @@ export class BreezeApi extends breeze_fetch.BreezeAsync {
         Throws:
           breeze_fetch.BreezeError on failure to delete contribution.
         */
-
         const params:string[] = new Array()
         if( payment_id !== undefined ) {
             params.push('payment_id='.concat('payment_id'))
@@ -821,50 +708,36 @@ export class BreezeApi extends breeze_fetch.BreezeAsync {
             throw new breeze_fetch.BreezeError('Deleting a contribution requires a payment_id.')
         }
         
-        return this._request(ENDPOINTS.CONTRIBUTIONS.concat('/delete?', params.join('&')))['payment_id'];    
-    }
-
-    list_funds(
-            {
-            include_totals
-            }:list_funds_params ) {
+        return state.request(ENDPOINTS.CONTRIBUTIONS.concat('/delete?', params.join('&')))['payment_id'];    
+    },
+    list_funds: ({include_totals}:list_funds_params ) => {
         /* List all funds.
         Args:
           include_totals: Amount given to the fund should be returned.
         Returns:
           JSON Reponse.
         */
-
         const params:string[] = new Array()
         if( include_totals !== undefined && include_totals ) {
             params.push('include_totals='.concat(include_totals.toString()))
         }
         
         try {
-            return this._request(ENDPOINTS.FUNDS.concat('/list?', params.join('&')));
+            return state.request(ENDPOINTS.FUNDS.concat('/list?', params.join('&')));
         } catch(e) {
-            return this._request(ENDPOINTS.FUNDS.concat('/list'));
+            return state.request(ENDPOINTS.FUNDS.concat('/list'));
         }
     }
-    
-    // TODO: View Contributions
+})
 
-    /*
-    * Pledges
-    */
+// TODO: View Contributions
+/*
+* Pledges
+*/
 
-    list_campaigns() {
-        /* List of campaigns.
-        Returns:
-          JSON response.
-        */
-        return this._request(ENDPOINTS.PLEDGES.concat('/list_campaigns'));
-    }
-
-    list_pledges(
-            {
-            campaign_id
-            }:list_pledges ) {
+const _pledges = (state) => ({
+    list_campaigns: () => state.request(ENDPOINTS.PLEDGES.concat('/list_campaigns')),
+    list_pledges: ({campaign_id}:list_pledges) => {
         /* List of pledges within a campaign.
         Args:
           campaign_id: ID number of a campaign.
@@ -878,25 +751,57 @@ export class BreezeApi extends breeze_fetch.BreezeAsync {
             throw new breeze_fetch.BreezeError('Listing pledges within a campaign requires a campaign_id.')
         }
         
-        return this._request(ENDPOINTS.PLEDGES.concat('/list_pledges?', params.join('&')));         
+        return state.request(ENDPOINTS.PLEDGES.concat('/list_pledges?', params.join('&')));         
+    }
+})
+
+/*
+* Forms
+*/
+const _forms = (state) => ({
+
+})
+// TODO: List Forms, List Form Fields, List Form Entries
+
+
+/*
+* Volunteers
+*/
+const _volunteers = (state) => ({
+
+})
+// TODO: List Volunteers, Add Volunteer, Update Volunteer, Remove Volunteer, List Volunteer Roles, Add Volunteer Role, Remove Volunteer Role
+
+/*
+* Account
+*/
+const _account = (state) => ({
+
+})
+// TODO: Summary, List Account Log
+
+/** 
+ * A wrapper for the Breeze REST API.
+ * Args:
+       state: object containing a `request` function to perform call to breezeCHMS API.
+ */
+    
+export const BreezeApi = (state) => {
+
+    if( typeof state['request'] !== 'function' ) {
+        throw new ReferenceError('request' + "() is not defined in state object passed in")
     }
 
-    /*
-    * Forms
-    */
-
-    // TODO: List Forms, List Form Fields, List Form Entries
-    
-    /*
-    * Volunteers
-    */
-
-    // TODO: List Volunteers, Add Volunteer, Update Volunteer, Remove Volunteer, List Volunteer Roles, Add Volunteer Role, Remove Volunteer Role
-    
-    /*
-    * Account
-    */
-
-    // TODO: Summary, List Account Log
-    
+    return Object.assign(
+        {},
+        _people(state),
+        _tags(state),
+        _events(state),
+        _check_in(state),
+        _contributions(state),
+        _pledges(state),
+        _forms(state),
+        _volunteers(state),
+        _account(state)
+    )
 }
