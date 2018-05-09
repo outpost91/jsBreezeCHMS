@@ -7,8 +7,7 @@
 *     let breeze_api = breeze.BreezeAsync(
 *         breeze_url='https://demo.breezechms.com',
 *         api_key='5c2d2cbacg3...')
-*     let people = breeze_api._request('/api/people');
-*     let person;
+*     let people = breeze_api.request('/api/people');
 *     for( let person in people) {
 *       console.log(person['first_name'], person['last_name'])
 *     }
@@ -30,45 +29,15 @@ export class BreezeError extends Error {
     }
 }
 
-export class BreezeAsync {
-    name:string = this.constructor.name;
-    
-    breeze_url:string;
-    api_key:string;
-    dry_run:boolean;
+const _request_succeeded = ( response ) => {
+    /* Predicate to ensure that the HTTP request succeeded.
+    */
+    return !((typeof response !== 'boolean' ) && ( ('error' in response) || ('errorCode' in response) ) );
+}
 
-    constructor( 
-            breeze_url:string,
-            api_key:string,
-            dry_run?:boolean ) {
-        /* Instantiates the BreezeApi with your Breeze account information.
-        Args:
-          breeze_url: Fully qualified domain for your organizations Breeze service.
-          api_key: Unique Breeze API key. For instructions on finding your
-                   organizations API key, see:
-                   http://breezechms.com/docs#extensions_api
-          dry_run: Enable no-op mode, which disables requests from being made. When
-                   combined with debug, this allows debugging requests without
-                   affecting data in your Breeze account.
-        */
-
-        this.breeze_url = breeze_url
-        this.api_key = api_key
-        this.dry_run = dry_run || false
-        
-        if (!(this.breeze_url && (this.breeze_url.search(/^https:\/\//) > -1) &&
-                (this.breeze_url.search(/\.breezechms\.com$/) > -1))) {
-            throw new BreezeError('You must provide your breeze_url as subdomain.breezechms.com: '.concat(this.breeze_url));
-        }
-
-        if( !this.api_key ){
-            throw new BreezeError('You must provide an API key.');
-        }
-    }
-
-    _request( 
-            endpoint:string,
-            optionalObj?:_request_params) {
+const _request = (state) => ({
+    request: ( endpoint:string,
+               optionalObj?:_request_params ) => {
         /* Makes an async HTTP 'GET' request to a given url.
         Args:
           endpoint: URL where the service can be accessed.
@@ -80,28 +49,27 @@ export class BreezeAsync {
           BreezeError if connection or request fails.
         */
 
-        const url:string = this.breeze_url + endpoint;
+        const url:string = state.breeze_url + endpoint;
         
         console.log('Making async request to %s', url);
         
-        if( !this.dry_run ) {
+        if( !state.dry_run ) {
             const options = {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Api-Key': this.api_key
+                    'Api-Key': state.api_key
                 },
                 timeout: ((optionalObj !== undefined && optionalObj.timeout !== undefined) ? optionalObj.timeout : 30) * 1000,
                 mode: 'cors'
             };
         
             return fetch(url, options)
-                    .then( res => res.json() )
-                    .then( data => {
-                        if( !this._request_succeeded(data) ) {
-                            return fetch.Promise.reject(new BreezeError(data));
+                    .then( res => {
+                        if( !_request_succeeded(res.json()) ) {
+                            return fetch.Promise.reject(new BreezeError(res));
                         }
-                        return fetch.Promise.resolve(data);
+                        return fetch.Promise.resolve(res);
                     })
                     .catch( error => {
                         return fetch.Promise.reject(new BreezeError(error));
@@ -110,11 +78,29 @@ export class BreezeAsync {
 
         return fetch.Promise.resolve({});
     }
+})
 
-    _request_succeeded( response ) {
-        /* Predicate to ensure that the HTTP request succeeded.
-        */
-        return !((typeof response !== 'boolean' ) && ( ('error' in response) || ('errorCode' in response) ) );
-    }
+export const BreezeAsync = (breeze_url:string,
+                            api_key:string,
+                            dry_run?:boolean) => {
     
+    if (!(breeze_url && (breeze_url.search(/^https:\/\//) > -1) &&
+            (breeze_url.search(/\.breezechms\.com$/) > -1))) {
+        throw new BreezeError('You must provide your breeze_url as subdomain.breezechms.com: '.concat(breeze_url));
+    }
+    if( !api_key ){
+        throw new BreezeError('You must provide an API key.');
+    }
+
+    const state = {
+        breeze_url,
+        api_key,
+        dry_run
+    }
+
+    return Object.assign(
+        {},
+        _request(state)
+    )
+        
 }
